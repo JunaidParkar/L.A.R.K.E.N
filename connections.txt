@@ -1,0 +1,197 @@
+LARKEN DESK COMPANION - WIRING REFERENCE
+========================================
+
+Target: ESP32-C3 SuperMini, ILI9341 SPI TFT for development, two TTP223 touch
+modules. Firmware supports an ST7789 panel by changing LARKEN_USE_ST7789 in
+Larken_VS.ino and matching the panel dimensions below.
+
+WI-FI / BREADBOARD PLACEMENT
+----------------------------
+The ESP32-C3 SuperMini normally has a small PCB antenna integrated at one end
+of the module. It has no external antenna socket; no separate antenna needs to
+be purchased or wired. Confirm the antenna end on your exact board revision.
+Do not bury that end between breadboard contacts. Keep it just beyond the
+breadboard edge with about 15-20 mm of clear space around it. Keep the TFT,
+its wiring, metal, batteries, and ground planes away from that area. Changing
+TFT or touch GPIO assignments will not fix antenna detuning or shielding.
+
+If Wi-Fi works with the ESP board lifted out of the breadboard, first keep the
+same wiring and power source and move only the antenna end into clear space.
+Then test with the TFT/backlight disconnected. A change that follows antenna
+position points to RF detuning/shielding; a change that follows the TFT load,
+USB cable, or breadboard power rails points to a supply/contact/short issue.
+Inspect for bent pins and accidental shorts before reinserting the board.
+
+Wi-Fi transmit bursts can expose weak breadboard or USB power connections.
+Use a stable regulated supply with a common ground and short power leads. Do
+not power the display backlight from an ESP GPIO, and do not connect 5 V to a
+3V3 rail. The setup firmware reports AP startup status, IP, and channel to
+Serial Monitor at 115200 baud; boot messages identify whether startup reached
+TFT initialization, and a heartbeat is printed every 3 seconds. The setup AP
+starts automatically on first boot when no home Wi-Fi credentials are saved,
+and requests 2.4 GHz channel 1. It uses AP-only mode until credentials are
+saved. Both sketches currently cap Wi-Fi transmit power at 8.5 dBm to test
+radio current draw; this also reduces range. Restore full/default power by
+removing the setTxPower call if range becomes inadequate. While AP+STA is
+active, the ESP32 may follow the home router's channel.
+
+LED PIN
+-------
+
+9 SDO (MISO)
+8 LED
+7 SCK
+6 SDI (MOSI)
+5 DC
+4 reset
+3 CS
+2 GND
+1 VCC
+
+PIN MAP USED BY THE FIRMWARE
+----------------------------
+ESP32-C3 GPIO 4  -> TFT SCK / SCL / CLK
+ESP32-C3 GPIO 6  -> TFT MOSI / SDA / DIN
+ESP32-C3 GPIO 7  -> TFT CS
+ESP32-C3 GPIO 3  -> TFT D/C / A0
+ESP32-C3 GPIO 10 -> TFT RESET / RST
+ESP32-C3 GPIO 0  <- TTP223 T1 OUT (main interaction sensor)
+ESP32-C3 GPIO 1  <- TTP223 T2 OUT (mode/setup sensor)
+
+TFT POWER AND SIGNALS
+---------------------
+TFT GND   -> ESP32-C3 GND
+TFT VCC   -> power input specified by the exact TFT breakout board
+TFT SCK   -> GPIO 4
+TFT MOSI  -> GPIO 6
+TFT MISO  -> not connected (display-only SPI)
+TFT CS    -> GPIO 7
+TFT DC    -> GPIO 3
+TFT RESET -> GPIO 10
+
+The ESP32-C3 GPIO pins are 3.3 V only. TFT signal inputs must be 3.3 V logic;
+do not connect a 5 V logic output to a GPIO. Some TFT breakouts accept 5 V at
+VCC because they include a regulator, while bare panels and other breakouts
+require 3.3 V. Check the markings/datasheet for the exact module before power
+is applied. Never power a bare 3.3 V panel from 5 V.
+
+BACKLIGHT
+---------
+Backlight wiring differs between TFT breakout boards. If the module has a
+backlight pin explicitly rated for 5 V, connect it to the board's 5 V supply
+only as its documentation specifies. If it is an unregulated LED/anode pin,
+do not connect it directly to 5 V: use a suitable current-limiting resistor
+or a transistor driver designed for that exact panel and its backlight
+current. Do not drive the backlight from an ESP32 GPIO. Tie the TFT supply
+ground, ESP32 ground, and backlight-supply ground together.
+
+TOUCH MODULES (BOTH)
+-------------------
+TTP223 VCC -> ESP32-C3 3V3
+TTP223 GND -> ESP32-C3 GND
+TTP223 OUT -> the assigned GPIO (T1 GPIO 0, T2 GPIO 1)
+
+Power both touch boards from 3V3 so OUT cannot exceed the ESP32-C3 input
+voltage. These firmware pins expect an active-HIGH TTP223 output. Verify the
+module's output mode/jumper setting; some boards can be configured active-low.
+Keep touch wires short and away from the TFT clock line to reduce false
+triggers. GPIO 0 and GPIO 1 are selected as ordinary inputs; do not use them
+for other peripherals in this wiring plan.
+
+POWER / DECOUPLING
+------------------
+Use a stable, regulated supply sized for the ESP32-C3 and TFT backlight. The
+USB 5 V input can power the board through its USB connector; connect grounds
+as above. Do not feed 5 V into the ESP32-C3 3V3 pin. Place the listed 10 uF
+capacitor across the regulated supply rail near the display/board (positive
+to the rail, negative stripe/lead to GND), observing its 16 V rating and
+polarity. The capacitor helps with transient load but does not replace an
+adequately rated supply or any backlight current limiting.
+
+OPTIONAL TRANSISTORS / RESISTORS
+-------------------------------
+The BC547, 2N3906, and resistors are not needed for the firmware as written.
+Do not wire them by transistor package shape alone: BC547 and 2N3906 pin
+orders vary by manufacturer/package. If a backlight driver is added, first
+identify the TFT backlight voltage/current and check the transistor datasheet
+pinout, base/gate drive, current rating, and required resistors. A 2N3906 is
+not a substitute for a current-limiting resistor.
+
+TOUCH CONTROLS
+--------------
+T1 tap       -> affectionate interaction; cycles pretend snack/water/cuddle
+T1 double    -> enter/exit setup Wi-Fi access point
+T1 triple    -> enter/exit developer HUD
+T1 hold      -> annoyed reaction
+T2 tap       -> next screen (companion, clock, status, games)
+T2 hold      -> enter/exit setup mode
+
+NOTES / LIMITS
+--------------
+The face, hands, eating, and drinking are screen animations only. No motors,
+servos, speaker, real food/water sensing, or physical feeding hardware is
+connected by this design. Hunger/thirst/energy are volatile demo values and
+reset at power-up. The setup access point is open (no AP password); connect
+to L.A.R.K.E.N Setup and browse to http://192.168.4.1. Enter the bot name,
+owner name, whole-hour UTC offset, and home Wi-Fi details. Use setup on a
+trusted nearby device. Wi-Fi credentials are stored in ESP32 Preferences/NVS;
+this is not encrypted application-level storage. The device keeps home Wi-Fi
+enabled for NTP time and status reporting. The timezone setting supports
+whole-hour offsets only.
+
+ARDUINO IDE LIBRARIES
+--------------------
+Install these libraries using Arduino IDE Library Manager:
+	Adafruit GFX Library
+	Adafruit ILI9341
+	Adafruit ST7735 and ST7789 Library
+
+Select an ESP32-C3 board in Arduino IDE. The sketch uses the ESP32 Arduino
+core's WiFi, WebServer, and Preferences libraries. Open the root
+Larken_VS.ino sketch; keep WifiEngine.h/.cpp and BotEngine.h/.cpp beside it in
+the same Larken_VS folder. Arduino IDE compiles those .cpp tabs automatically.
+For an ST7789 panel, set LARKEN_USE_ST7789 to 1 and set TFT_NATIVE_WIDTH /
+TFT_NATIVE_HEIGHT to the panel's actual dimensions (common panels are 240x240
+or 240x320). Check the panel orientation and wiring before powering it.
+
+GRAPHICS BUFFER
+---------------
+BotEngine owns all display drawing. It allocates a small RGB565 face buffer
+(up to 256x120 pixels, with smaller fallbacks if heap is limited), draws each
+animation frame in RAM, and transfers only that face region to the TFT. Other
+screens clear the display only when changing modes and update only their
+changing fields afterward. A full-screen RGB565 buffer is intentionally not
+used because it would consume about 150 KB on a 320x240 panel. The serial log
+reports the actual face-buffer size and the measured render rate; 30 fps must
+still be confirmed on the assembled hardware.
+
+SERIAL MONITOR ON ESP32-C3
+--------------------------
+Select the correct ESP32-C3 board and its current COM port. Set Serial Monitor
+to 115200 baud. For boards using the chip's native USB connector, enable
+Tools > USB CDC On Boot > Enabled, upload, then reopen Serial Monitor on the
+port that appears after upload/reset. Some SuperMini revisions use a USB-to-
+UART bridge instead; select that board's serial port and leave USB CDC disabled
+if that is how the board enumerates. The display selection does not affect
+serial output.
+
+ISOLATED RADIO / SERIAL TEST
+----------------------------
+Open wifi_radio_test/wifi_radio_test.ino as a separate Arduino sketch, select
+the ESP32-C3 board and its upload port, then upload it. Set the Serial Monitor
+to 115200 baud and scan near the board for ESP32-C3-SuperMini-AP. The test
+password is yourpassword123. This test does not initialize the TFT, touch
+sensors, saved settings, or setup portal; it starts the access point at
+8.5 dBm transmit power.
+
+Interpret the result:
+	Serial text and test network visible: the USB serial and radio work; retry
+		Larken_VS.ino, which now starts its setup AP on first boot if no Wi-Fi
+		credentials have been saved.
+	Serial text says AP=started but no network is visible: test close to the
+		board with the antenna end clear, then remove TFT/backlight wiring; suspect
+		antenna damage, board placement, or power integrity if still absent.
+	Serial text says AP start=FAILED: record the full line; Wi-Fi did not start.
+	No serial text: confirm upload reports success, then reopen the port that
+		appears after reset and verify USB CDC On Boot / USB-to-UART settings above.
+		The test also emits a heartbeat every two seconds if it is running.
