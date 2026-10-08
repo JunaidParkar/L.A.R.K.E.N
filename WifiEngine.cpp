@@ -69,6 +69,31 @@ void WifiEngine::toggleSetupPortal() {
 	else startSetupPortal();
 }
 
+void WifiEngine::shutdownForSleep() {
+	if (routesStarted) server.stop();
+	routesStarted = false;
+	WiFi.softAPdisconnect(true);
+	WiFi.disconnect(false, false);
+	WiFi.mode(WIFI_OFF);
+	portalActive = false;
+	connecting = false;
+	connected = false;
+	timeSynced = false;
+}
+
+void WifiEngine::resetUserSettings() {
+	shutdownForSleep();
+	preferences.clear();
+	savedSsid = "";
+	configuredBotName = "Larken";
+	configuredOwnerName = "";
+	timezoneOffsetHours = 0;
+	ntpConfigured = false;
+	connectedSsidValue = "";
+	message = "User settings reset";
+	startSetupPortal();
+}
+
 void WifiEngine::startHomeWifi() {
 	if (savedSsid.isEmpty()) {
 		connected = false;

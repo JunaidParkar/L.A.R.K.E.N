@@ -57,6 +57,12 @@ uint32_t BotEngine::framebufferBytes() const {
 	return static_cast<uint32_t>(faceBuffer->width()) * faceBuffer->height() * sizeof(uint16_t);
 }
 
+void BotEngine::prepareForDeepSleep() {
+	if (!display) return;
+	display->sendCommand(0x28);
+	display->sendCommand(0x10);
+}
+
 bool BotEngine::allocateFaceBuffer() {
 	if (!display) return false;
 	const int16_t availableWidth = display->width() - 24;
@@ -108,6 +114,9 @@ void BotEngine::render(const BotVisualState &state, uint32_t now) {
 	case LarkenScreen::Developer:
 		drawDeveloper(state, now);
 		break;
+	case LarkenScreen::PowerMenu:
+	case LarkenScreen::ResetConfirm:
+		break;
 	}
 
 	if (now - fpsWindowStarted >= 1000) {
@@ -133,6 +142,8 @@ void BotEngine::drawScreenBase(const BotVisualState &state) {
 	case LarkenScreen::Games: drawGamesBase(state); break;
 	case LarkenScreen::Setup: drawSetupBase(); break;
 	case LarkenScreen::Developer: drawDeveloperBase(); break;
+	case LarkenScreen::PowerMenu: drawPowerMenuBase(); break;
+	case LarkenScreen::ResetConfirm: drawResetConfirmBase(); break;
 	}
 }
 
@@ -208,6 +219,21 @@ void BotEngine::drawDeveloperBase() {
 		display->setCursor(14, 45 + i * 19);
 		display->print(labels[i]);
 	}
+}
+
+void BotEngine::drawPowerMenuBase() {
+	drawCentered("POWER MENU", 28, 2, C_MINT);
+	drawCentered("Single click: power off", 82, 1, C_WHITE);
+	drawCentered("Double click: reboot", 108, 1, C_WHITE);
+	drawCentered("Triple click: reset options", 134, 1, C_AMBER);
+	drawCentered("Hold 3 seconds to return", display->height() - 28, 1, C_MUTED);
+}
+
+void BotEngine::drawResetConfirmBase() {
+	drawCentered("RESET USER SETTINGS?", 30, 2, C_AMBER);
+	drawCentered("Single click: cancel", 88, 1, C_WHITE);
+	drawCentered("Double click: factory reset", 116, 1, C_RED);
+	drawCentered("Firmware and chip stay intact", 154, 1, C_MUTED);
 }
 
 void BotEngine::drawCompanion(const BotVisualState &state, uint32_t now) {

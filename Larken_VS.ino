@@ -1,8 +1,10 @@
 #include <SPI.h>
+#include <esp_sleep.h>
 #include <Adafruit_ILI9341.h>
 #include <Adafruit_ST7789.h>
 #include "WifiEngine.h"
 #include "BotEngine.h"
+#include "PowerButton.h"
 
 #define LARKEN_USE_ST7789 0
 
@@ -13,6 +15,7 @@ static const uint8_t PIN_TFT_DC = 3;
 static const uint8_t PIN_TFT_RST = 10;
 static const uint8_t PIN_TOUCH_T1 = 0;
 static const uint8_t PIN_TOUCH_T2 = 1;
+static const uint8_t PIN_POWER_BUTTON = 5;
 
 #if LARKEN_USE_ST7789
 static const uint16_t TFT_NATIVE_WIDTH = 240;
@@ -24,6 +27,7 @@ Adafruit_ILI9341 tft(PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
 
 WifiEngine wifiEngine;
 BotEngine botEngine;
+PowerButton powerButton;
 LarkenScreen screenMode = LarkenScreen::Companion;
 BotExpression actionExpression = BotExpression::Calm;
 
@@ -99,6 +103,8 @@ void cycleMode() {
 }
 
 void updateTouches(uint32_t now) {
+	if (screenMode == LarkenScreen::PowerMenu || screenMode == LarkenScreen::ResetConfirm) return;
+
 	const bool t1 = isTouchActive(PIN_TOUCH_T1);
 	if (t1 && !t1WasTouched) {
 		t1WasTouched = true;
@@ -138,6 +144,45 @@ void updateTouches(uint32_t now) {
 	}
 }
 
+void enterDeepSleep() {
+	const esp_err_t wakeResult = esp_deep_sleep_enable_gpio_wakeup(
+		1ULL << PIN_POWER_BUTTON, ESP_GPIO_WAKEUP_GPIO_LOW);
+	if (wakeResult != ESP_OK) {
+		Serial.printf("POWER: GPIO wake setup failed (%d); staying awake\n", static_cast<int>(wakeResult));
+		return;
+	}
+
+	Serial.println("POWER: entering deep sleep; press the power button to wake");
+	botEngine.prepareForDeepSleep();
+	wifiEngine.shutdownForSleep();
+	Serial.flush();
+	delay(20);
+	esp_deep_sleep_start();
+}
+
+void handlePowerButton(uint32_t now) {
+	const PowerButtonEvent event = powerButton.update(now);
+	if (event == PowerButtonEvent::None) return;
+
+	if (screenMode == LarkenScreen::PowerMenu) {
+		if (event == PowerButtonEvent::SingleClick) enterDeepSleep();
+		else if (event == PowerButtonEvent::DoubleClick) ESP.restart();
+		else if (event == PowerButtonEvent::TripleClick) screenMode = LarkenScreen::ResetConfirm;
+		return;
+	}
+
+	if (screenMode == LarkenScreen::ResetConfirm) {
+		if (event == PowerButtonEvent::SingleClick) screenMode = LarkenScreen::Companion;
+		else if (event == PowerButtonEvent::DoubleClick) {
+			wifiEngine.resetUserSettings();
+			screenMode = LarkenScreen::Setup;
+		}
+		return;
+	}
+
+	if (event == PowerButtonEvent::LongPress) screenMode = LarkenScreen::PowerMenu;
+}
+
 BotExpression currentExpression(uint32_t now) {
 	if (t1WasTouched && now - t1PressStarted > 2600) return BotExpression::Angry;
 	if (static_cast<int32_t>(actionUntil - now) > 0) return actionExpression;
@@ -165,6 +210,7 @@ void setup() {
 	while (!Serial && millis() - serialWaitStarted < 3000) delay(10);
 	Serial.println("LARKEN BOOT: serial online, 115200 baud");
 	Serial.println("LARKEN BOOT: starting Wi-Fi engine");
+	powerButton.begin(PIN_POWER_BUTTON);
 	pinMode(PIN_TOUCH_T1, INPUT);
 	pinMode(PIN_TOUCH_T2, INPUT);
 	wifiEngine.begin();
@@ -189,6 +235,7 @@ void setup() {
 
 void loop() {
 	const uint32_t now = millis();
+	handlePowerButton(now);
 	updateTouches(now);
 	updateNeeds(now);
 	wifiEngine.update(now);

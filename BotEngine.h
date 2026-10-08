@@ -7,7 +7,7 @@ class GFXcanvas16;
 
 #include <Arduino.h>
 
-enum class LarkenScreen : uint8_t { Companion, Clock, Status, Games, Setup, Developer };
+enum class LarkenScreen : uint8_t { Companion, Clock, Status, Games, Setup, Developer, PowerMenu, ResetConfirm };
 enum class BotExpression : uint8_t { Calm, Happy, Love, Hungry, Thirsty, Sleepy, Angry, Eating, Drinking, Bored, Playful };
 
 struct BotVisualState {
@@ -40,6 +40,7 @@ public:
 
 	bool begin(Adafruit_SPITFT &display);
 	void render(const BotVisualState &state, uint32_t now);
+	void prepareForDeepSleep();
 	uint16_t measuredFps() const { return fps; }
 	uint32_t framebufferBytes() const;
 	bool isBuffered() const { return faceBuffer != nullptr; }
@@ -71,6 +72,8 @@ private:
 	void drawGamesBase(const BotVisualState &state);
 	void drawSetupBase();
 	void drawDeveloperBase();
+	void drawPowerMenuBase();
+	void drawResetConfirmBase();
 	void drawCompanion(const BotVisualState &state, uint32_t now);
 	void drawFaceFrame(BotExpression expression, uint32_t now);
 	void drawEye(int16_t cx, int16_t cy, int16_t eyeWidth, int16_t eyeHeight, BotExpression expression, float phase, bool leftEye);

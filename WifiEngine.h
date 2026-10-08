@@ -10,6 +10,8 @@ public:
 	void begin();
 	void update(uint32_t now);
 	void toggleSetupPortal();
+	void shutdownForSleep();
+	void resetUserSettings();
 
 	bool setupPortalActive() const { return portalActive; }
 	bool isConnecting() const { return connecting; }
