@@ -8,14 +8,17 @@ const uint16_t C_BLACK = 0x0000;
 const uint16_t C_PANEL = 0x0841;
 const uint16_t C_PANEL_EDGE = 0x2128;
 const uint16_t C_WHITE = 0xFFFF;
+const uint16_t C_SCLERA = 0xEF7D;
 const uint16_t C_CYAN = 0x07FF;
 const uint16_t C_MINT = 0x7FEA;
 const uint16_t C_TEAL = 0x04F2;
 const uint16_t C_PINK = 0xF9B6;
+const uint16_t C_SKIN = 0xEF9B;
 const uint16_t C_AMBER = 0xFDC0;
 const uint16_t C_RED = 0xF800;
 const uint16_t C_IRIS = 0x2D7F;
 const uint16_t C_PUPIL = 0x0823;
+const uint16_t C_MOUTH = 0xA9B2;
 const uint16_t C_MUTED = 0x7BEF;
 const uint16_t C_TRACK = 0x3186;
 const char *GAME_NAMES[] = {"STAR CATCH", "BUBBLE POP", "TINY MAZE", "MOON HOP", "COLOR DOTS"};
@@ -128,9 +131,6 @@ void BotEngine::render(const BotVisualState &state, uint32_t now) {
 
 void BotEngine::drawScreenBase(const BotVisualState &state) {
 	display->fillScreen(C_BLACK);
-	lastFood = -1;
-	lastWater = -1;
-	lastEnergy = -1;
 	previousGameX = -1;
 	previousGameY = -1;
 	lastGameScore = 0xFFFF;
@@ -148,26 +148,7 @@ void BotEngine::drawScreenBase(const BotVisualState &state) {
 }
 
 void BotEngine::drawCompanionBase(const BotVisualState &state) {
-	display->setTextSize(1);
-	display->setTextColor(C_MINT, C_BLACK);
-	display->setCursor(12, 9);
-	display->print(valueOr(state.botName, "Larken"));
-	display->setTextColor(C_MUTED, C_BLACK);
-	display->setCursor(display->width() - 72, 9);
-	display->print(shortValue(valueOr(state.ownerName, "FRIEND"), 8));
-
-	const int16_t panelHeight = display->height() - 78;
-	display->drawRoundRect(10, 32, display->width() - 20, panelHeight, 22, C_PANEL_EDGE);
-	const int16_t barX = 12;
-	const int16_t barWidth = display->width() - 26;
-	const int16_t barY = display->height() - 29;
-	display->setTextColor(C_WHITE, C_BLACK);
-	display->setCursor(barX, barY);
-	display->print("FOOD");
-	display->setCursor(barX, barY + 11);
-	display->print("WATER");
-	display->drawRoundRect(barX + 52, barY, barWidth - 52, 8, 3, C_TRACK);
-	display->drawRoundRect(barX + 52, barY + 11, barWidth - 52, 8, 3, C_TRACK);
+	(void)state;
 }
 
 void BotEngine::drawClockBase() {
@@ -237,17 +218,6 @@ void BotEngine::drawResetConfirmBase() {
 }
 
 void BotEngine::drawCompanion(const BotVisualState &state, uint32_t now) {
-	if (lastFood != state.hunger) {
-		drawNeedBar(display->height() - 29, state.hunger, C_AMBER);
-		lastFood = state.hunger;
-	}
-	if (lastWater != state.thirst) {
-		drawNeedBar(display->height() - 18, state.thirst, C_CYAN);
-		lastWater = state.thirst;
-	}
-	if (lastEnergy != state.energy) {
-		lastEnergy = state.energy;
-	}
 	if (!faceBuffer || now - lastFrameAt < 33) return;
 
 	drawFaceFrame(state.expression, now);
@@ -260,120 +230,181 @@ void BotEngine::drawFaceFrame(BotExpression expression, uint32_t now) {
 	GFXcanvas16 &canvas = *faceBuffer;
 	canvas.fillScreen(C_BLACK);
 	const int16_t centerX = canvas.width() / 2;
-	const int16_t centerY = canvas.height() * 45 / 100;
-	const int16_t eyeWidth = min<int16_t>(68, canvas.width() / 3);
-	const int16_t eyeHeight = canvas.height() * 58 / 100;
-	const int16_t eyeOffset = canvas.width() * 19 / 100;
 	const float phase = now / 1000.0f;
+	const float gazeX = sinf(phase * 0.47f) * 7.0f + sinf(phase * 0.19f) * 2.0f;
+	const float gazeY = sinf(phase * 0.31f + 0.7f) * 4.0f;
+	const int16_t wholeEyeX = static_cast<int16_t>(gazeX);
+	const int16_t wholeEyeY = static_cast<int16_t>(gazeY);
+	const int16_t eyeWidth = max<int16_t>(30, min<int16_t>(64, canvas.width() * 25 / 100));
+	const int16_t eyeHeight = min<int16_t>(76, eyeWidth * 118 / 100);
+	const int16_t eyeOffset = canvas.width() * 17 / 100;
+	const int16_t eyeY = canvas.height() * 40 / 100 + wholeEyeY;
+	drawEye(centerX - eyeOffset + wholeEyeX, eyeY, eyeWidth, eyeHeight, expression, phase, true);
+	drawEye(centerX + eyeOffset + wholeEyeX, eyeY, eyeWidth, eyeHeight, expression, phase, false);
 
-	canvas.drawFastHLine(canvas.width() / 2 - 9, canvas.height() - 13, 18, 0x18E3);
-	drawEye(centerX - eyeOffset, centerY, eyeWidth, eyeHeight, expression, phase, true);
-	drawEye(centerX + eyeOffset, centerY, eyeWidth, eyeHeight, expression, phase, false);
-	drawMouth(centerX, canvas.height() * 78 / 100, canvas.width() / 7, expression, phase);
-	drawHands(expression, centerX, canvas.height() - 20, phase);
+	if (expression == BotExpression::Happy || expression == BotExpression::Love ||
+		expression == BotExpression::Hungry || expression == BotExpression::Thirsty ||
+		expression == BotExpression::Sleepy || expression == BotExpression::Angry ||
+		expression == BotExpression::Eating || expression == BotExpression::Drinking ||
+		expression == BotExpression::Playful) {
+		drawMouth(centerX, canvas.height() * 77 / 100, canvas.width() / 6, expression, phase);
+	}
+	drawHands(expression, centerX, canvas.height() * 79 / 100, phase);
 }
 
 void BotEngine::drawEye(int16_t cx, int16_t cy, int16_t eyeWidth, int16_t eyeHeight, BotExpression expression, float phase, bool leftEye) {
 	GFXcanvas16 &canvas = *faceBuffer;
-	const int16_t radius = eyeWidth / 3;
-	const uint16_t browColor = expression == BotExpression::Angry ? C_RED : C_MUTED;
+	const uint16_t blinkPhase = static_cast<uint16_t>(static_cast<uint32_t>(phase * 1000.0f) % 4100);
+	float blink = 0.0f;
+	if (blinkPhase < 155) blink = sinf((blinkPhase / 155.0f) * 3.14159f);
 
-	if (expression == BotExpression::Love) {
-		const int16_t heartSize = min<int16_t>(13, eyeWidth / 4);
-		canvas.fillCircle(cx - heartSize / 2, cy - 2, heartSize / 2, C_PINK);
-		canvas.fillCircle(cx + heartSize / 2, cy - 2, heartSize / 2, C_PINK);
-		canvas.fillTriangle(cx - heartSize, cy, cx + heartSize, cy, cx, cy + heartSize + 4, C_PINK);
+	if (expression == BotExpression::Sleepy) {
+		drawQuadratic(cx - eyeWidth / 2, cy, cx, cy + 3, cx + eyeWidth / 2, cy, C_SCLERA, 4);
 		return;
 	}
 
-	if (expression == BotExpression::Sleepy || expression == BotExpression::Happy) {
-		const int16_t tilt = leftEye ? -3 : 3;
-		drawQuadratic(cx - eyeWidth / 2, cy + 3, cx, cy + tilt, cx + eyeWidth / 2, cy + 3, expression == BotExpression::Happy ? C_WHITE : C_MINT, 3);
-		return;
-	}
-
-	float openAmount = 1.0f;
-	const uint16_t blinkPhase = static_cast<uint16_t>(static_cast<uint32_t>(phase * 1000.0f) % 4800);
-	if (blinkPhase < 150) {
-		const float t = blinkPhase / 150.0f;
-		openAmount = 1.0f - 0.94f * sinf(t * 3.14159f);
-	}
-	if (expression == BotExpression::Bored) openAmount *= 0.62f;
-	if (expression == BotExpression::Angry) openAmount *= 0.72f;
-	if (expression == BotExpression::Thirsty) openAmount *= 0.88f;
-	const int16_t visibleHeight = max<int16_t>(3, static_cast<int16_t>(eyeHeight * openAmount));
+	float openness = 1.0f - blink * 0.94f;
+	if (expression == BotExpression::Love) openness *= 0.76f;
+	if (expression == BotExpression::Happy) openness *= 1.08f;
+	if (expression == BotExpression::Bored) openness *= 0.66f;
+	if (expression == BotExpression::Angry) openness *= 0.74f;
+	if (expression == BotExpression::Thirsty) openness *= 0.84f;
+	const int16_t visibleHeight = max<int16_t>(4, static_cast<int16_t>(eyeHeight * openness));
 	const int16_t eyeTop = cy - visibleHeight / 2;
-
-	canvas.fillRoundRect(cx - eyeWidth / 2 - 3, eyeTop - 3, eyeWidth + 6, visibleHeight + 6, radius + 4, C_TEAL);
-	canvas.fillRoundRect(cx - eyeWidth / 2, eyeTop, eyeWidth, visibleHeight, radius, C_WHITE);
+	const int16_t radius = min<int16_t>(eyeWidth / 3, visibleHeight / 2);
+	canvas.drawRoundRect(cx - eyeWidth / 2 - 1, eyeTop - 1, eyeWidth + 2, visibleHeight + 2, radius + 1, C_PANEL_EDGE);
+	canvas.fillRoundRect(cx - eyeWidth / 2, eyeTop, eyeWidth, visibleHeight, radius, C_SCLERA);
 
 	if (visibleHeight > eyeHeight / 3) {
-		const int16_t gazeX = static_cast<int16_t>(sinf(phase * 0.7f) * 3.0f);
-		const int16_t gazeY = static_cast<int16_t>(sinf(phase * 0.43f + (leftEye ? 0.0f : 0.4f)) * 2.0f);
-		const int16_t irisRadius = max<int16_t>(7, min<int16_t>(eyeWidth / 3, visibleHeight / 3));
-		const int16_t irisY = cy + gazeY + visibleHeight / 13;
-		canvas.fillCircle(cx + gazeX, irisY, irisRadius, C_IRIS);
-		canvas.fillCircle(cx + gazeX, irisY + 2, irisRadius * 2 / 3, C_PUPIL);
-		canvas.fillCircle(cx + gazeX - irisRadius / 3, irisY - irisRadius / 3, max<int16_t>(2, irisRadius / 4), C_WHITE);
-		canvas.fillCircle(cx + gazeX + irisRadius / 3, irisY + irisRadius / 3, max<int16_t>(1, irisRadius / 8), C_CYAN);
+		const int16_t pupilDriftX = static_cast<int16_t>(sinf(phase * 0.83f + (leftEye ? 0.0f : 0.16f)) * 2.0f);
+		const int16_t irisRadius = max<int16_t>(7, min<int16_t>(eyeWidth / 4, visibleHeight / 3));
+		const int16_t irisY = cy + visibleHeight / 12;
+		canvas.fillCircle(cx + pupilDriftX, irisY, irisRadius, C_IRIS);
+		canvas.fillCircle(cx + pupilDriftX, irisY + 2, irisRadius * 2 / 3, C_PUPIL);
+		canvas.fillCircle(cx + pupilDriftX - irisRadius / 3, irisY - irisRadius / 3, max<int16_t>(2, irisRadius / 4), C_WHITE);
+		canvas.fillCircle(cx + pupilDriftX + irisRadius / 3, irisY + irisRadius / 3, max<int16_t>(1, irisRadius / 8), C_CYAN);
 	}
 
-	if (expression == BotExpression::Angry || expression == BotExpression::Hungry) {
+	if (expression == BotExpression::Angry) {
 		const int16_t browY = eyeTop - 7;
-		if (leftEye) drawQuadratic(cx - eyeWidth / 2 - 2, browY - 2, cx, browY + 1, cx + eyeWidth / 2 + 2, browY + 8, browColor, 2);
-		else drawQuadratic(cx - eyeWidth / 2 - 2, browY + 8, cx, browY + 1, cx + eyeWidth / 2 + 2, browY - 2, browColor, 2);
+		if (leftEye) drawQuadratic(cx - eyeWidth / 2 - 2, browY - 2, cx, browY + 1, cx + eyeWidth / 2 + 2, browY + 8, C_RED, 3);
+		else drawQuadratic(cx - eyeWidth / 2 - 2, browY + 8, cx, browY + 1, cx + eyeWidth / 2 + 2, browY - 2, C_RED, 3);
 	}
-
-	if (expression == BotExpression::Happy || expression == BotExpression::Love) {
-		canvas.fillCircle(cx - eyeWidth / 2 - 2, cy + eyeHeight / 2, 4, C_PINK);
-		canvas.fillCircle(cx + eyeWidth / 2 + 2, cy + eyeHeight / 2, 4, C_PINK);
+	if (expression == BotExpression::Love || expression == BotExpression::Playful) {
+		canvas.fillCircle(cx - eyeWidth / 2 + 1, cy + eyeHeight / 2 - 2, 4, C_PINK);
+		canvas.fillCircle(cx + eyeWidth / 2 - 1, cy + eyeHeight / 2 - 2, 4, C_PINK);
 	}
 }
 
 void BotEngine::drawMouth(int16_t cx, int16_t cy, int16_t width, BotExpression expression, float phase) {
 	GFXcanvas16 &canvas = *faceBuffer;
-	const uint16_t color = expression == BotExpression::Angry ? C_RED : (expression == BotExpression::Thirsty ? C_CYAN : C_MINT);
-	if (expression == BotExpression::Sleepy || expression == BotExpression::Bored) {
-		const int16_t yawn = expression == BotExpression::Sleepy ? 7 + static_cast<int16_t>((sinf(phase * 1.7f) + 1.0f) * 5.0f) : 5;
-		canvas.fillRoundRect(cx - 5, cy - yawn / 2, 10, yawn, 5, color);
+	if (expression == BotExpression::Calm || expression == BotExpression::Bored) return;
+	const uint16_t lipColor = expression == BotExpression::Angry ? C_RED : C_PINK;
+	if (expression == BotExpression::Sleepy || expression == BotExpression::Hungry || expression == BotExpression::Eating || expression == BotExpression::Drinking) {
+		const int16_t openHeight = expression == BotExpression::Sleepy
+			? 5 + static_cast<int16_t>((sinf(phase * 1.8f) + 1.0f) * 7.0f)
+			: (expression == BotExpression::Hungry ? 16 : 6 + static_cast<int16_t>((sinf(phase * 4.8f) + 1.0f) * 5.0f));
+		const int16_t openWidth = expression == BotExpression::Sleepy ? 13 : (expression == BotExpression::Hungry ? 21 : 17);
+		canvas.fillRoundRect(cx - openWidth / 2, cy - openHeight / 2, openWidth, openHeight, openWidth / 2, lipColor);
+		if (openHeight > 10) canvas.fillRoundRect(cx - openWidth / 3, cy + 1, openWidth * 2 / 3, openHeight / 4, 3, C_MOUTH);
 		return;
 	}
-	if (expression == BotExpression::Hungry || expression == BotExpression::Eating || expression == BotExpression::Drinking) {
-		const int16_t openHeight = expression == BotExpression::Hungry ? 12 : 8 + static_cast<int16_t>((sinf(phase * 5.0f) + 1.0f) * 4.0f);
-		canvas.fillRoundRect(cx - width / 8, cy - openHeight / 2, width / 4, openHeight, width / 8, C_PINK);
-		canvas.drawFastHLine(cx - width / 10, cy + openHeight / 5, width / 5, C_RED);
+	if (expression == BotExpression::Thirsty) {
+		canvas.drawRoundRect(cx - 5, cy - 4, 10, 9, 4, C_CYAN);
 		return;
 	}
 	if (expression == BotExpression::Angry) {
-		canvas.drawLine(cx - 12, cy - 3, cx - 5, cy + 2, color);
-		canvas.drawLine(cx - 5, cy + 2, cx + 2, cy - 3, color);
-		canvas.drawLine(cx + 2, cy - 3, cx + 10, cy + 2, color);
+		canvas.drawLine(cx - 12, cy - 2, cx - 5, cy + 2, lipColor);
+		canvas.drawLine(cx - 5, cy + 2, cx + 2, cy - 2, lipColor);
+		canvas.drawLine(cx + 2, cy - 2, cx + 10, cy + 2, lipColor);
 		return;
 	}
-	const int16_t smile = (expression == BotExpression::Happy || expression == BotExpression::Love || expression == BotExpression::Playful) ? 8 : 3;
-	drawQuadratic(cx - width / 5, cy - 2, cx, cy + smile, cx + width / 5, cy - 2, color, 2);
+	const int16_t smile = expression == BotExpression::Happy || expression == BotExpression::Love || expression == BotExpression::Playful ? 7 : 3;
+	drawQuadratic(cx - width / 4, cy - 2, cx, cy + smile, cx + width / 4, cy - 2, lipColor, 2);
 }
 
 void BotEngine::drawHands(BotExpression expression, int16_t centerX, int16_t centerY, float phase) {
-	if (expression != BotExpression::Eating && expression != BotExpression::Drinking && expression != BotExpression::Angry && expression != BotExpression::Playful) return;
 	GFXcanvas16 &canvas = *faceBuffer;
-	const int16_t armLift = static_cast<int16_t>(sinf(phase * (expression == BotExpression::Angry ? 7.0f : 4.0f)) * 4.0f);
-	const uint16_t color = expression == BotExpression::Angry ? C_RED : C_WHITE;
-	const int16_t armY = centerY + armLift;
-	const int16_t spread = canvas.width() * 39 / 100;
-	drawQuadratic(centerX - spread, armY, centerX - spread - 9, armY - 16, centerX - spread + 1, armY - 22, color, 3);
-	drawQuadratic(centerX + spread, armY, centerX + spread + 9, armY - 16, centerX + spread - 1, armY - 22, color, 3);
-	canvas.fillCircle(centerX - spread + 1, armY - 22, 5, color);
-	canvas.fillCircle(centerX + spread - 1, armY - 22, 5, color);
-	canvas.drawFastVLine(centerX - spread - 2, armY - 27, 8, color);
-	canvas.drawFastVLine(centerX + spread + 2, armY - 27, 8, color);
-	if (expression == BotExpression::Drinking) {
-		canvas.drawRoundRect(centerX + spread - 1, armY - 37, 9, 13, 3, C_CYAN);
-		canvas.drawFastVLine(centerX + spread + 3, armY - 42, 6, C_CYAN);
+	const int16_t handLift = static_cast<int16_t>(sinf(phase * 2.2f) * 2.0f);
+	const int16_t cheekY = canvas.height() * 63 / 100 + handLift;
+	const uint16_t handColor = C_SCLERA;
+	if (expression == BotExpression::Love) {
+		drawHeartHands(centerX, canvas.height() * 65 / 100);
+	} else if (expression == BotExpression::Happy || expression == BotExpression::Playful) {
+		const int16_t cheekX = canvas.width() * 33 / 100;
+		drawHand(centerX - cheekX, cheekY, true, handColor);
+		drawHand(centerX + cheekX, cheekY, false, handColor);
+	} else if (expression == BotExpression::Hungry || expression == BotExpression::Eating || expression == BotExpression::Drinking) {
+		const int16_t reach = expression == BotExpression::Eating ? static_cast<int16_t>((sinf(phase * 3.8f) + 1.0f) * 5.0f) : 0;
+		const int16_t handX = centerX + canvas.width() * 23 / 100 - reach;
+		const int16_t handY = expression == BotExpression::Hungry ? canvas.height() * 57 / 100 : canvas.height() * 63 / 100 - reach;
+		if (expression == BotExpression::Drinking) {
+			const int16_t cupX = centerX + 16;
+			const int16_t cupY = canvas.height() * 52 / 100;
+			canvas.drawRoundRect(cupX, cupY, 16, 21, 3, C_CYAN);
+			canvas.drawFastHLine(cupX + 2, cupY + 6, 12, C_CYAN);
+			canvas.drawLine(cupX + 9, cupY, cupX + 5, cupY - 7, C_WHITE);
+			drawHand(cupX + 17, cupY + 18, false, handColor);
+		} else {
+			drawHand(handX, handY, false, handColor);
+		}
+	} else if (expression == BotExpression::Sleepy) {
+		const int16_t stretch = static_cast<int16_t>((sinf(phase * 1.1f) + 1.0f) * 5.0f);
+		const int16_t raisedY = canvas.height() * 46 / 100 - stretch;
+		drawHand(30, raisedY, true, handColor);
+		drawHand(canvas.width() - 30, raisedY, false, handColor);
+	} else if (expression == BotExpression::Angry) {
+		const int16_t fistY = canvas.height() - 12 + static_cast<int16_t>(sinf(phase * 8.0f) * 2.0f);
+		canvas.fillRoundRect(7, fistY - 12, 23, 15, 7, C_SCLERA);
+		canvas.fillRoundRect(canvas.width() - 30, fistY - 12, 23, 15, 7, C_SCLERA);
+		for (int8_t crease = 0; crease < 3; ++crease) {
+			canvas.drawFastHLine(12, fistY - 8 + crease * 4, 12, C_TEAL);
+			canvas.drawFastHLine(canvas.width() - 24, fistY - 8 + crease * 4, 12, C_TEAL);
+		}
 	}
-	if (expression == BotExpression::Eating) {
-		canvas.fillCircle(centerX - spread + 1, armY - 31, 3, C_AMBER);
+}
+
+void BotEngine::drawHand(int16_t palmX, int16_t palmY, bool leftHand, uint16_t skinColor) {
+	GFXcanvas16 &canvas = *faceBuffer;
+	const int8_t inward = leftHand ? 1 : -1;
+	const int16_t palmTop = palmY - 4;
+	const int16_t palmLeft = palmX - 19;
+	const int16_t palmWidth = 38;
+	const int16_t palmHeight = 30;
+	const int8_t fingerX[] = {-15, -7, 1, 9};
+	const int8_t fingerLength[] = {17, 26, 24, 16};
+	for (int8_t finger = 0; finger < 4; ++finger) {
+		const int16_t x = palmX + fingerX[finger];
+		const int16_t tipY = palmY - fingerLength[finger];
+		const int16_t fingerBottom = palmTop + 8;
+		canvas.fillRoundRect(x, tipY, 6, fingerBottom - tipY, 3, skinColor);
+		canvas.drawRoundRect(x, tipY, 6, fingerBottom - tipY, 3, C_PANEL_EDGE);
+		canvas.drawFastHLine(x + 1, tipY + 5, 4, C_WHITE);
 	}
+	canvas.fillRoundRect(palmLeft, palmTop, palmWidth, palmHeight, 9, skinColor);
+	canvas.drawRoundRect(palmLeft, palmTop, palmWidth, palmHeight, 9, C_PANEL_EDGE);
+	drawQuadratic(palmX + inward * 16, palmY + 8, palmX + inward * 24, palmY + 2, palmX + inward * 19, palmY - 7, skinColor, 5);
+	canvas.drawFastHLine(palmX - 7, palmY + 9, 10, C_PANEL_EDGE);
+	canvas.drawFastHLine(palmX - 5, palmY + 16, 7, C_PANEL_EDGE);
+}
+
+void BotEngine::drawHeartHands(int16_t centerX, int16_t centerY) {
+	GFXcanvas16 &canvas = *faceBuffer;
+	const int16_t palmY = centerY + 5;
+	canvas.fillRoundRect(centerX - 31, palmY - 1, 27, 22, 9, C_SCLERA);
+	canvas.fillRoundRect(centerX + 4, palmY - 1, 27, 22, 9, C_SCLERA);
+	canvas.drawRoundRect(centerX - 31, palmY - 1, 27, 22, 9, C_PANEL_EDGE);
+	canvas.drawRoundRect(centerX + 4, palmY - 1, 27, 22, 9, C_PANEL_EDGE);
+	// Index fingers meet at the cleft; thumbs meet below, with outer fingers visible on both palms.
+	drawQuadratic(centerX - 10, palmY + 2, centerX - 12, palmY - 18, centerX, palmY - 12, C_SCLERA, 4);
+	drawQuadratic(centerX + 10, palmY + 2, centerX + 12, palmY - 18, centerX, palmY - 12, C_SCLERA, 4);
+	for (int8_t finger = 0; finger < 3; ++finger) {
+		const int16_t offsetY = palmY - 5 - finger * 4;
+		drawQuadratic(centerX - 28, offsetY, centerX - 22, offsetY - 3, centerX - 17, offsetY, C_SCLERA, 3);
+		drawQuadratic(centerX + 28, offsetY, centerX + 22, offsetY - 3, centerX + 17, offsetY, C_SCLERA, 3);
+	}
+	drawQuadratic(centerX - 10, palmY + 12, centerX - 6, palmY + 24, centerX, palmY + 24, C_SCLERA, 4);
+	drawQuadratic(centerX + 10, palmY + 12, centerX + 6, palmY + 24, centerX, palmY + 24, C_SCLERA, 4);
 }
 
 void BotEngine::drawClock(const BotVisualState &state, uint32_t now) {
@@ -474,14 +505,6 @@ void BotEngine::drawDeveloper(const BotVisualState &state, uint32_t now) {
 		display->setCursor(display->width() / 2 - 2, y + row * 19);
 		display->print(values[row]);
 	}
-}
-
-void BotEngine::drawNeedBar(int16_t y, uint8_t value, uint16_t color) {
-	const int16_t x = 66;
-	const int16_t width = display->width() - x - 14;
-	const int16_t fillWidth = (width - 4) * min<uint8_t>(100, value) / 100;
-	display->fillRect(x + 2, y + 2, width - 4, 4, C_BLACK);
-	if (fillWidth > 0) display->fillRoundRect(x + 2, y + 2, fillWidth, 4, 2, color);
 }
 
 void BotEngine::drawCentered(const String &text, int16_t y, uint8_t size, uint16_t color) {
